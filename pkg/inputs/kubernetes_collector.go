@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ type KubernetesCollector struct {
 	clientset   *kubernetes.Clientset
 	stopChan    chan struct{}
 	logTrackers sync.Map
+	nodeName    string
+	namespace   string
 }
 
 func NewKubernetesCollector() *KubernetesCollector {
@@ -31,10 +34,46 @@ func NewKubernetesCollector() *KubernetesCollector {
 		log.Fatalf("Error creating Kubernetes client: %v", err)
 	}
 
-	return &KubernetesCollector{
+	collector := &KubernetesCollector{
 		clientset: clientset,
 		stopChan:  make(chan struct{}),
+		namespace: getNamespace(),
 	}
+
+	collector.nodeName = collector.getCurrentNodeName()
+	fmt.Printf("Agent running on node: %s\n", collector.nodeName)
+
+	return collector
+}
+
+func getNamespace() string {
+	data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		log.Fatalf("Error reading namespace file: %v", err)
+	}
+	return string(data)
+}
+
+func (kc *KubernetesCollector) getCurrentNodeName() string {
+	podName := kc.getPodName()
+
+	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
+	podList, err := kc.clientset.CoreV1().Pods(kc.namespace).List(context.TODO(), metav1.ListOptions{
+		FieldSelector: fieldSelector,
+	})
+	if err != nil || len(podList.Items) == 0 {
+		log.Fatalf("Error getting current pod: %v", err)
+	}
+
+	return podList.Items[0].Spec.NodeName
+}
+
+func (kc *KubernetesCollector) getPodName() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		log.Fatalf("Error getting hostname: %v", err)
+	}
+	return hostname
 }
 
 func (kc *KubernetesCollector) Start() {
@@ -49,15 +88,21 @@ func (kc *KubernetesCollector) Start() {
 		"cilium-system": true,
 	}
 
+	ownPodName := kc.getPodName()
+
 	for {
 		select {
 		case <-kc.stopChan:
 			fmt.Println("Stopping Kubernetes Collector...")
 			return
 		default:
-			pods, err := kc.clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
+			fieldSelector := fmt.Sprintf("spec.nodeName=%s", kc.nodeName)
+			pods, err := kc.clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+				FieldSelector: fieldSelector,
+			})
 			if err != nil {
 				log.Printf("Error listing pods: %v", err)
+				time.Sleep(5 * time.Second)
 				continue
 			}
 
@@ -66,8 +111,14 @@ func (kc *KubernetesCollector) Start() {
 					continue
 				}
 
-				if _, loaded := kc.logTrackers.LoadOrStore(pod.Name, true); !loaded {
-					go kc.streamLogs(pod.Namespace, pod.Name)
+				if pod.Name == ownPodName {
+					continue
+				}
+
+				podKey := fmt.Sprintf("%s-%s", pod.Namespace, pod.UID)
+
+				if _, loaded := kc.logTrackers.LoadOrStore(podKey, true); !loaded {
+					go kc.streamLogs(pod.Namespace, pod.Name, podKey)
 				}
 			}
 
@@ -76,7 +127,7 @@ func (kc *KubernetesCollector) Start() {
 	}
 }
 
-func (kc *KubernetesCollector) streamLogs(namespace, podName string) {
+func (kc *KubernetesCollector) streamLogs(namespace, podName, podKey string) {
 	ctx := context.Background()
 	logOptions := &v1.PodLogOptions{
 		Follow:    true,
@@ -87,7 +138,7 @@ func (kc *KubernetesCollector) streamLogs(namespace, podName string) {
 	logStream, err := logRequest.Stream(ctx)
 	if err != nil {
 		log.Printf("Error getting logs for pod %s/%s: %v", namespace, podName, err)
-		kc.logTrackers.Delete(podName)
+		kc.logTrackers.Delete(podKey)
 		return
 	}
 	defer logStream.Close()
@@ -100,12 +151,12 @@ func (kc *KubernetesCollector) streamLogs(namespace, podName string) {
 				break
 			}
 			log.Printf("Error reading logs for pod %s/%s: %v", namespace, podName, err)
-			return
+			break
 		}
 		fmt.Printf("[Pod: %s] %s", podName, string(buf[:bytesRead]))
 	}
 
-	kc.logTrackers.Delete(podName)
+	kc.logTrackers.Delete(podKey)
 }
 
 func (kc *KubernetesCollector) Stop() {
