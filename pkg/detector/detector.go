@@ -2,11 +2,14 @@ package detector
 
 import (
 	"fmt"
-	"log-agent/pkg/inputs"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+
+	"log-agent/pkg/inputs"
+	"log-agent/pkg/outputs"
+	"log-agent/pkg/processor"
 )
 
 func DetectEnvironment() string {
@@ -44,6 +47,10 @@ func DetectEnvironment() string {
 
 func StartCollector() {
 	env := DetectEnvironment()
+
+	output := outputs.NewStdoutOutput()
+	logProcessor := processor.NewLogProcessor(output)
+
 	var collector interface {
 		Start()
 		Stop()
@@ -51,9 +58,10 @@ func StartCollector() {
 
 	switch env {
 	case "kubernetes", "microk8s", "minikube":
-		collector = inputs.NewKubernetesCollector()
+		k8sCollector := inputs.NewKubernetesCollector(logProcessor)
+		collector = k8sCollector
 	case "docker":
-		collector = inputs.NewContainerCollector()
+		collector = inputs.NewContainerCollector(logProcessor)
 	default:
 		fmt.Println("No suitable environment detected. Exiting...")
 		return

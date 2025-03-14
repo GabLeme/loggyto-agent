@@ -1,25 +1,29 @@
 package inputs
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"time"
 
+	"log-agent/pkg/processor"
+	"log-agent/pkg/utils"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/stdcopy"
 )
 
 type ContainerCollector struct {
 	client      *client.Client
 	stopChan    chan struct{}
 	logTrackers sync.Map
+	Logger      *processor.LogProcessor
+	hostInfo    map[string]string
 }
 
-func NewContainerCollector() *ContainerCollector {
+func NewContainerCollector(logger *processor.LogProcessor) *ContainerCollector {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatalf("Error creating Docker client: %v", err)
@@ -28,6 +32,8 @@ func NewContainerCollector() *ContainerCollector {
 	return &ContainerCollector{
 		client:   cli,
 		stopChan: make(chan struct{}),
+		Logger:   logger,
+		hostInfo: utils.GetHostMetadata(),
 	}
 }
 
@@ -75,9 +81,26 @@ func (cc *ContainerCollector) streamLogs(containerID string) {
 	defer logReader.Close()
 
 	fmt.Printf("[Container: %s] Streaming logs...\n", containerID[:12])
-	_, err = stdcopy.StdCopy(os.Stdout, os.Stderr, logReader)
-	if err != nil {
-		log.Printf("Error processing logs for container %s: %v", containerID, err)
+
+	scanner := bufio.NewScanner(logReader)
+	for scanner.Scan() {
+		logMessage := scanner.Bytes()
+
+		if len(logMessage) > 8 {
+			logMessage = logMessage[8:]
+		}
+
+		cc.Logger.ProcessLog("container", string(logMessage), map[string]string{
+			"container_id": containerID,
+			"host_name":    cc.hostInfo["host_name"],
+			"machine_ip":   cc.hostInfo["machine_ip"],
+			"os":           cc.hostInfo["os"],
+			"architecture": cc.hostInfo["architecture"],
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading logs for container %s: %v", containerID, err)
 	}
 
 	cc.logTrackers.Delete(containerID)

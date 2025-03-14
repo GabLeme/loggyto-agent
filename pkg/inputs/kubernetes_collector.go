@@ -9,6 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"log-agent/pkg/processor"
+	"log-agent/pkg/utils"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -21,9 +24,11 @@ type KubernetesCollector struct {
 	logTrackers sync.Map
 	nodeName    string
 	namespace   string
+	Logger      *processor.LogProcessor
+	hostInfo    map[string]string
 }
 
-func NewKubernetesCollector() *KubernetesCollector {
+func NewKubernetesCollector(logger *processor.LogProcessor) *KubernetesCollector {
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		log.Fatalf("Error creating in-cluster Kubernetes config: %v", err)
@@ -38,6 +43,8 @@ func NewKubernetesCollector() *KubernetesCollector {
 		clientset: clientset,
 		stopChan:  make(chan struct{}),
 		namespace: getNamespace(),
+		Logger:    logger,
+		hostInfo:  utils.GetHostMetadata(),
 	}
 
 	collector.nodeName = collector.getCurrentNodeName()
@@ -153,7 +160,17 @@ func (kc *KubernetesCollector) streamLogs(namespace, podName, podKey string) {
 			log.Printf("Error reading logs for pod %s/%s: %v", namespace, podName, err)
 			break
 		}
-		fmt.Printf("[Pod: %s] %s", podName, string(buf[:bytesRead]))
+
+		logMessage := string(buf[:bytesRead])
+
+		kc.Logger.ProcessLog("kubernetes", logMessage, map[string]string{
+			"pod_name":     podName,
+			"namespace":    namespace,
+			"host_name":    kc.hostInfo["host_name"],
+			"machine_ip":   kc.hostInfo["machine_ip"],
+			"os":           kc.hostInfo["os"],
+			"architecture": kc.hostInfo["architecture"],
+		})
 	}
 
 	kc.logTrackers.Delete(podKey)
