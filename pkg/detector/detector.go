@@ -7,7 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"log-agent/pkg/inputs"
+	"log-agent/pkg/collector/docker"
+	"log-agent/pkg/collector/kubernetes"
 	"log-agent/pkg/outputs"
 	"log-agent/pkg/processor"
 )
@@ -58,10 +59,10 @@ func StartCollector() {
 
 	switch env {
 	case "kubernetes", "microk8s", "minikube":
-		k8sCollector := inputs.NewKubernetesCollector(logProcessor)
+		k8sCollector := kubernetes.NewKubernetesCollector(logProcessor)
 		collector = k8sCollector
 	case "docker":
-		collector = inputs.NewContainerCollector(logProcessor)
+		collector = docker.NewContainerCollector(logProcessor)
 	default:
 		fmt.Println("No suitable environment detected. Exiting...")
 		return

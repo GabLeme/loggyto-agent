@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-agent
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: log-agent
+  template:
+    metadata:
+      labels:
+        app: log-agent
+    spec:
+      imagePullSecrets:
+        - name: dockerhub-secret 
+      containers:
+        - name: log-agent
+          image: gableme/proxito:latest
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock

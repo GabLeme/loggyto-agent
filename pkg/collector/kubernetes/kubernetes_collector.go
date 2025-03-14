@@ -1,9 +1,8 @@
-package inputs
+package kubernetes
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"log-agent/pkg/processor"
 	"log-agent/pkg/utils"
 
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -63,8 +61,8 @@ func getNamespace() string {
 
 func (kc *KubernetesCollector) getCurrentNodeName() string {
 	podName := kc.getPodName()
-
 	fieldSelector := fmt.Sprintf("metadata.name=%s", podName)
+
 	podList, err := kc.clientset.CoreV1().Pods(kc.namespace).List(context.TODO(), metav1.ListOptions{
 		FieldSelector: fieldSelector,
 	})
@@ -125,55 +123,14 @@ func (kc *KubernetesCollector) Start() {
 				podKey := fmt.Sprintf("%s-%s", pod.Namespace, pod.UID)
 
 				if _, loaded := kc.logTrackers.LoadOrStore(podKey, true); !loaded {
-					go kc.streamLogs(pod.Namespace, pod.Name, podKey)
+					logStreamer := NewKubernetesLogStreamer(kc.clientset, kc.Logger, pod.Namespace, pod.Name, podKey, kc.hostInfo)
+					go logStreamer.StreamLogs()
 				}
 			}
 
 			time.Sleep(5 * time.Second)
 		}
 	}
-}
-
-func (kc *KubernetesCollector) streamLogs(namespace, podName, podKey string) {
-	ctx := context.Background()
-	logOptions := &v1.PodLogOptions{
-		Follow:    true,
-		TailLines: func(i int64) *int64 { return &i }(10),
-	}
-
-	logRequest := kc.clientset.CoreV1().Pods(namespace).GetLogs(podName, logOptions)
-	logStream, err := logRequest.Stream(ctx)
-	if err != nil {
-		log.Printf("Error getting logs for pod %s/%s: %v", namespace, podName, err)
-		kc.logTrackers.Delete(podKey)
-		return
-	}
-	defer logStream.Close()
-
-	buf := make([]byte, 4096)
-	for {
-		bytesRead, err := logStream.Read(buf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			log.Printf("Error reading logs for pod %s/%s: %v", namespace, podName, err)
-			break
-		}
-
-		logMessage := string(buf[:bytesRead])
-
-		kc.Logger.ProcessLog("kubernetes", logMessage, map[string]string{
-			"pod_name":     podName,
-			"namespace":    namespace,
-			"host_name":    kc.hostInfo["host_name"],
-			"machine_ip":   kc.hostInfo["machine_ip"],
-			"os":           kc.hostInfo["os"],
-			"architecture": kc.hostInfo["architecture"],
-		})
-	}
-
-	kc.logTrackers.Delete(podKey)
 }
 
 func (kc *KubernetesCollector) Stop() {
