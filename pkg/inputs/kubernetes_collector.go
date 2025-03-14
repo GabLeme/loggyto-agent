@@ -40,19 +40,32 @@ func NewKubernetesCollector() *KubernetesCollector {
 func (kc *KubernetesCollector) Start() {
 	fmt.Println("Kubernetes Collector started...")
 
+	excludedNamespaces := map[string]bool{
+		"kube-system":   true,
+		"istio-system":  true,
+		"monitoring":    true,
+		"calico-system": true,
+		"logging":       true,
+		"cilium-system": true,
+	}
+
 	for {
 		select {
 		case <-kc.stopChan:
 			fmt.Println("Stopping Kubernetes Collector...")
 			return
 		default:
-			pods, err := kc.clientset.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
+			pods, err := kc.clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
 			if err != nil {
 				log.Printf("Error listing pods: %v", err)
 				continue
 			}
 
 			for _, pod := range pods.Items {
+				if excludedNamespaces[pod.Namespace] {
+					continue
+				}
+
 				if _, loaded := kc.logTrackers.LoadOrStore(pod.Name, true); !loaded {
 					go kc.streamLogs(pod.Namespace, pod.Name)
 				}
