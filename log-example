@@ -1,0 +1,24 @@
+2025-04-02 14:45:30.123  INFO 12345 --- [nio-8080-exec-1] com.example.controller.UserController : User login successful - username=john.doe
+2025-04-02 14:45:30,456 INFO  [com.exa.ser.UserService] (executor-thread-1) User retrieved successfully - id=42
+2025-04-02 14:45:30,789 - INFO - app.services.user_service - User registered - email=jane.doe@example.com
+2025-04-02 14:45:31.345 [INF] Microsoft.AspNetCore.Mvc.ControllerActionInvoker - Executed action OrdersController.CreateOrder (MyApp) in 75.1231ms
+2025-04-02 14:50:00.312  INFO 12345 --- [nio-8080-exec-2] com.example.api.AuthController : Authentication attempt - username=admin
+2025-04-02 14:50:00.456  WARN 12345 --- [nio-8080-exec-2] com.example.service.AuthService : Invalid login attempt - username=admin, reason=Bad credentials
+2025-04-02 14:50:01.231 ERROR 12345 --- [nio-8080-exec-3] com.example.service.OrderService : Failed to process order - orderId=1023, reason=OutOfStockException
+2025-04-02 14:51:22,567 INFO  [com.exa.res.UserResource] (executor-thread-2) GET /api/users/42 - 200 OK
+2025-04-02 14:51:23,011 WARN  [com.exa.ser.InventoryService] (executor-thread-4) Low stock alert - productId=234, available=2
+2025-04-02 14:51:23,999 ERROR [com.exa.db.DatabaseClient] (executor-thread-3) Database connection timeout - host=db-server, port=5432
+2025-04-02 14:52:10,321 - INFO - app.controllers.auth - Login attempt by user: john.doe
+2025-04-02 14:52:11,009 - WARNING - app.services.email - Email service delay detected - latency=1200ms
+2025-04-02 14:52:12,712 - ERROR - app.database.connection - Cannot connect to PostgreSQL: timeout expired
+Traceback (most recent call last):
+  File "db_client.py", line 42, in connect
+    connection = psycopg2.connect(...)
+psycopg2.OperationalError: connection timed out
+2025-04-02 14:54:00.654 [INF] MyApp.Controllers.UserController - GET /api/users/42 - 200 OK
+2025-04-02 14:54:01.234 [WRN] MyApp.Services.PaymentService - Payment processing delay - userId=3001, duration=2150ms
+2025-04-02 14:54:02.112 [ERR] MyApp.Repositories.UserRepository - Failed to save user to database - SqlException: Violation of PRIMARY KEY constraint 'PK_Users'
+172.17.0.1 - - [02/Apr/2025:00:08:32 +0000] "GET / HTTP/1.1" 200 503 "-" "Mozilla/5.0 (Macintosh; Inte
+2025/04/02 00:08:24 [notice] 1#1: start worker process 22
+2025-04-02 01:00:06.302 UTC [1] LOG:  background worker "logical replication launcher" (PID 33) exited with exit code 1
+2025-04-02 01:00:06.310 UTC [28] LOG:  checkpoint complete: wrote 3 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.003 s, sync=0.001 s, total=0.008 s; sync files=2, longest=0.001 s, average=0.001 s; distance=0 kB, estimate=0 kB; lsn=0/1B78E00, redo lsn=0/1B78E00

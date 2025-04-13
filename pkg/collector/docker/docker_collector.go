@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"log-agent/pkg/utils"
 
 	"github.com/docker/docker/api/types/container"
+	dockerevents "github.com/docker/docker/api/types/events"
 	"github.com/docker/docker/client"
 )
 
@@ -25,7 +27,7 @@ type DockerCollector struct {
 func NewContainerCollector(logger *processor.LogProcessor) *DockerCollector {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		log.Fatalf("Error creating Docker client: %v", err)
+		log.Fatalf("[ERROR] Error creating Docker client: %v", err)
 	}
 
 	return &DockerCollector{
@@ -38,7 +40,8 @@ func NewContainerCollector(logger *processor.LogProcessor) *DockerCollector {
 }
 
 func (cc *DockerCollector) Start() {
-	log.Println("Docker Collector started...")
+	log.Println("[INFO] Docker Collector started...")
+	go cc.watchDockerEvents()
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -46,7 +49,7 @@ func (cc *DockerCollector) Start() {
 	for {
 		select {
 		case <-cc.stopChan:
-			log.Println("Stopping Docker Collector...")
+			log.Println("[WARNING] Stopping Docker Collector...")
 			return
 		case <-ticker.C:
 			cc.collectContainers()
@@ -60,21 +63,108 @@ func (cc *DockerCollector) collectContainers() {
 
 	containers, err := cc.client.ContainerList(ctx, container.ListOptions{})
 	if err != nil {
-		log.Printf("Error listing docker containers: %v", err)
+		log.Printf("[ERROR] Error listing docker containers: %v", err)
 		return
 	}
 
-	for _, container := range containers {
+	for _, cont := range containers {
+		containerID := cont.ID
+		containerName := strings.TrimPrefix(cont.Names[0], "/")
+
 		cc.mu.Lock()
-		if _, exists := cc.logTrackers[container.ID]; !exists {
-			cc.logTrackers[container.ID] = struct{}{}
-			go StartLogStream(cc.client, container.ID, cc.Logger, cc.hostInfo, cc)
+		if _, exists := cc.logTrackers[containerID]; exists {
+			cc.mu.Unlock()
+			continue
 		}
+		cc.logTrackers[containerID] = struct{}{}
 		cc.mu.Unlock()
+
+		go cc.startContainerLogStream(containerID, containerName)
 	}
+}
+
+func (cc *DockerCollector) startContainerLogStream(containerID, containerName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	containerInfo, err := cc.client.ContainerInspect(ctx, containerID)
+	if err != nil {
+		log.Printf("[ERROR] Error inspecting container %s: %v", containerID[:12], err)
+		return
+	}
+
+	cc.checkContainerMounts(containerName, containerID, containerInfo)
+	StartLogStream(cc.client, containerID, containerName, cc.Logger, cc)
+}
+
+func (cc *DockerCollector) checkContainerMounts(containerName, containerID string, containerInfo container.InspectResponse) {
+	// for _, mount := range containerInfo.Mounts {
+	// 	src := strings.ToLower(mount.Source)
+	// 	dest := strings.ToLower(mount.Destination)
+	// 	if strings.Contains(src, "log") || strings.Contains(dest, "log") {
+	// 		log.Printf("[WARNING] Container '%s' (%s) has a volume mount involving logs: '%s' -> '%s'. Logs might be written to files instead of stdout/stderr.",
+	// 			containerName, containerID[:12], mount.Source, mount.Destination)
+	// 	}
+	// }
 }
 
 func (cc *DockerCollector) Stop() {
 	close(cc.stopChan)
 	cc.client.Close()
+}
+
+func (cc *DockerCollector) watchDockerEvents() {
+	ctx := context.Background()
+	eventChan, errChan := cc.client.Events(ctx, dockerevents.ListOptions{})
+
+	for {
+		select {
+		case <-cc.stopChan:
+			log.Println("Stopping Docker event watcher...")
+			return
+		case event := <-eventChan:
+			cc.handleDockerEvent(event)
+		case err := <-errChan:
+			log.Printf("[ERROR] Error watching Docker events: %v", err)
+			time.Sleep(5 * time.Second)
+			go cc.watchDockerEvents()
+			return
+		}
+	}
+}
+
+func (cc *DockerCollector) handleDockerEvent(event dockerevents.Message) {
+	if event.Type != "container" {
+		return
+	}
+
+	containerID := event.Actor.ID
+	containerName := event.Actor.Attributes["name"]
+
+	switch event.Action {
+	case "start":
+		cc.handleContainerStarted(containerID, containerName)
+	case "die", "stop", "kill":
+		cc.handleContainerStopped(containerID, containerName, string(event.Action))
+	}
+}
+
+func (cc *DockerCollector) handleContainerStarted(containerID, containerName string) {
+	cc.mu.Lock()
+	if _, exists := cc.logTrackers[containerID]; exists {
+		cc.mu.Unlock()
+		return
+	}
+	cc.logTrackers[containerID] = struct{}{}
+	cc.mu.Unlock()
+
+	log.Printf("[INFO] Detected new container: %s. Starting log stream...", containerName)
+	go cc.startContainerLogStream(containerID, containerName)
+}
+
+func (cc *DockerCollector) handleContainerStopped(containerID, containerName, reason string) {
+	log.Printf("[WARNING] Container %s (%s) has stopped. Reason: %s", containerName, containerID[:12], reason)
+	cc.mu.Lock()
+	delete(cc.logTrackers, containerID)
+	cc.mu.Unlock()
 }

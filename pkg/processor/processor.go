@@ -1,61 +1,88 @@
 package processor
 
 import (
+	"bytes"
 	"encoding/json"
+	"net/http"
+
 	"log-agent/pkg/outputs"
+
+	"github.com/google/uuid"
 )
 
+const logEndpoint = "http://localhost:9090/logs" // Substitua pela URL real
+
 type LogProcessor struct {
-	output outputs.Output
+	output   outputs.Output
+	groupers map[string]*ExceptionGrouper
 }
 
 func NewLogProcessor(output outputs.Output) *LogProcessor {
-	return &LogProcessor{output: output}
+	return &LogProcessor{
+		output:   output,
+		groupers: make(map[string]*ExceptionGrouper),
+	}
 }
 
 func (p *LogProcessor) ProcessLog(source, logData string, metadata map[string]string) {
-	entries := splitLogEntries(logData)
+	containerID := metadata["container_id"]
 
-	for _, entryData := range entries {
-		cleanedMessage := cleanLogMessage(entryData)
-		parsedMessage, _ := parseJSONMessage(cleanedMessage)
-		level := detectLogLevel(cleanedMessage)
-		tags := extractTags(cleanedMessage)
-		traceID, spanID := extractTracingInfo(cleanedMessage)
-		timestamp := normalizeTimestamp(cleanedMessage)
-		eventType := "APPLICATION_LOG"
+	// if parsed, ok := TryParseJSONLog(logData); ok {
+	// 	entry := LogEntry{
+	// 		Message:   parsed.Message,
+	// 		Timestamp: parsed.Timestamp,
+	// 		Level:     parsed.Level,
+	// 		MessageId: uuid.New().String(),
+	// 		Labels:    mergeMaps(metadata, parsed.Metadata),
+	// 	}
+	// 	logJSON, _ := json.Marshal(entry)
+	// 	return
+	// }
 
-		var labels map[string]string
-		if rawLabels, ok := metadata["labels"]; ok {
-			json.Unmarshal([]byte(rawLabels), &labels)
-		}
-
-		entry := LogEntry{
-			Timestamp:     timestamp,
-			Source:        source,
-			Level:         level,
-			Message:       parsedMessage,
-			Tags:          tags,
-			TraceID:       traceID,
-			SpanID:        spanID,
-			EventType:     eventType,
-			HostName:      metadata["host_name"],
-			MachineIP:     metadata["machine_ip"],
-			OS:            metadata["os"],
-			Architecture:  metadata["architecture"],
-			ContainerID:   metadata["container_id"],
-			ContainerName: metadata["container_name"],
-			Image:         metadata["image"],
-			Labels:        labels,
-			PodName:       metadata["pod_name"],
-			Namespace:     metadata["namespace"],
-		}
-
-		logJSON, err := json.Marshal(entry)
-		if err != nil {
-			continue
-		}
-
-		p.output.Write(string(logJSON))
+	grouper, ok := p.groupers[containerID]
+	if !ok {
+		grouper = NewExceptionGrouper()
+		p.groupers[containerID] = grouper
 	}
+
+	grouped, ready := grouper.ProcessLine(logData)
+	if !ready || grouped == nil {
+		return
+	}
+
+	cleanedMessage := cleanLogMessage(grouped.Message)
+	logLevel := grouped.LogLevel
+	if logLevel == "" {
+		logLevel = detectLogLevel(cleanedMessage)
+	}
+	timestamp, _, inferred := TryExtractTimestamp(cleanedMessage)
+
+	entry := LogEntry{
+		Message:           cleanedMessage,
+		Timestamp:         timestamp,
+		Level:             logLevel,
+		MessageId:         uuid.New().String(),
+		Labels:            metadata,
+		TimestampInferred: inferred,
+	}
+
+	logJSON, _ := json.Marshal(entry)
+	go sendLogToEndpoint(logJSON)
+	println(string(logJSON))
+}
+
+func (p *LogProcessor) Flush(containerID string) (*GroupedLog, bool) {
+	if grouper, ok := p.groupers[containerID]; ok {
+		return grouper.Flush()
+	}
+	return nil, false
+}
+
+func sendLogToEndpoint(logData []byte) {
+	resp, err := http.Post(logEndpoint, "application/json", bytes.NewBuffer(logData))
+	if err != nil {
+		println("err")
+		return
+	}
+	defer resp.Body.Close()
 }

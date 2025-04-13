@@ -1,48 +1,60 @@
 package processor
 
 import (
-	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
+	"unicode/utf8"
+)
+
+var (
+	ansiRegex           = regexp.MustCompile(`\x1b\[[0-9;]*m|\[\d+m`)
+	multiSpaceRegex     = regexp.MustCompile(`\s{2,}`)
+	controlCharRegex    = regexp.MustCompile(`[\x00-\x1F\x7F]+`)
+	escapedUnicodeRegex = regexp.MustCompile(`\\u[0-9a-fA-F]{4}`)
+	escapedNewlineRegex = regexp.MustCompile(`(\\n|\\r|\r|\n|\t)+`)
 )
 
 func cleanLogMessage(logData string) string {
-	cleaned := strings.Map(func(r rune) rune {
-		if unicode.IsPrint(r) {
-			return r
+	logData = ansiRegex.ReplaceAllString(logData, "")
+	logData = controlCharRegex.ReplaceAllString(logData, " ")
+	logData = escapedNewlineRegex.ReplaceAllString(logData, " ")
+	logData = escapedUnicodeRegex.ReplaceAllStringFunc(logData, func(s string) string {
+		r, err := decodeUnicodeEscape(s)
+		if err != nil {
+			return ""
 		}
-		return -1
-	}, logData)
-
-	return strings.TrimSpace(cleaned)
+		return r
+	})
+	logData = removeNonPrintable(logData)
+	logData = multiSpaceRegex.ReplaceAllString(logData, " ")
+	return strings.TrimSpace(logData)
 }
 
-func parseJSONMessage(logData string) (interface{}, bool) {
-	var jsonData map[string]interface{}
-	if err := json.Unmarshal([]byte(logData), &jsonData); err == nil {
-		return jsonData, true
+func decodeUnicodeEscape(s string) (string, error) {
+	var r rune
+	_, err := fmt.Sscanf(s, `\u%04x`, &r)
+	if err != nil || !utf8.ValidRune(r) {
+		return "", err
 	}
-	return logData, false
+	return string(r), nil
 }
 
-func normalizeTimestamp(logData string) string {
-	timePatterns := []string{
-		`(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})`,
-		`(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)`,
-	}
-
-	for _, pattern := range timePatterns {
-		re := regexp.MustCompile(pattern)
-		match := re.FindString(logData)
-		if match != "" {
-			parsedTime, err := time.Parse("2006/01/02 15:04:05", match)
-			if err == nil {
-				return parsedTime.UTC().Format(time.RFC3339)
-			}
+func removeNonPrintable(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsPrint(r) && !isEmoji(r) {
+			b.WriteRune(r)
 		}
 	}
+	return b.String()
+}
 
-	return time.Now().UTC().Format(time.RFC3339)
+func isEmoji(r rune) bool {
+	return (r >= 0x1F600 && r <= 0x1F64F) || // emoticons
+		(r >= 0x1F300 && r <= 0x1F5FF) || // misc symbols
+		(r >= 0x1F680 && r <= 0x1F6FF) || // transport & map symbols
+		(r >= 0x2600 && r <= 0x26FF) || // miscellaneous symbols
+		(r >= 0x2700 && r <= 0x27BF) // dingbats
 }
