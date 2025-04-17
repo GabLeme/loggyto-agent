@@ -10,17 +10,22 @@ import (
 )
 
 func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) {
+	// Abre o journal
 	j, err := sdjournal.NewJournal()
 	if err != nil {
 		log.Fatalf("[ERROR] Failed to open journald: %v", err)
 	}
 	defer j.Close()
 
-	// Exemplo: coletar apenas logs de unidades systemd específicas
-	// j.AddMatch("_SYSTEMD_UNIT=sshd.service")
+	// Vai para o final para coletar apenas logs novos
+	if err := j.SeekTail(); err != nil {
+		log.Fatalf("[ERROR] Failed to seek to tail: %v", err)
+	}
 
-	j.SeekTail()
+	// Move o cursor uma entrada para frente para não pegar a última repetida
 	j.Next()
+
+	log.Println("[INFO] Journald streaming started...")
 
 	for {
 		select {
@@ -28,9 +33,18 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			log.Println("[INFO] Journald stream stopped.")
 			return
 		default:
+			// Aguarda nova entrada com timeout de 1s
+			r := j.Wait(time.Second)
+			if r == sdjournal.SD_JOURNAL_NOP {
+				continue // nenhum novo log, volta para esperar
+			}
+
 			n, err := j.Next()
-			if err != nil || n == 0 {
-				time.Sleep(300 * time.Millisecond)
+			if err != nil {
+				log.Printf("[ERROR] Failed to read next journal entry: %v", err)
+				continue
+			}
+			if n == 0 {
 				continue
 			}
 
@@ -45,20 +59,26 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 				continue
 			}
 
-			//timestamp := time.Unix(0, int64(entry.RealtimeTimestamp)*int64(time.Microsecond))
 			prio := entry.Fields["PRIORITY"]
-			source := entry.Fields["SYSLOG_IDENTIFIER"] // ou "_SYSTEMD_UNIT" se preferir
+			source := entry.Fields["SYSLOG_IDENTIFIER"]
 			if source == "" {
 				source = "unknown"
 			}
 
+			unit := entry.Fields["_SYSTEMD_UNIT"]
+			pid := entry.Fields["_PID"]
+			uid := entry.Fields["_UID"]
+
 			metadata := map[string]string{
 				"priority": prio,
-				"unit":     entry.Fields["_SYSTEMD_UNIT"],
-				"pid":      entry.Fields["_PID"],
-				"uid":      entry.Fields["_UID"],
+				"unit":     unit,
+				"pid":      pid,
+				"uid":      uid,
 				"journal":  "true",
 			}
+
+			// DEBUG ATIVADO
+			log.Printf("[DEBUG] New journal entry from '%s': %s", source, logMessage)
 
 			// Envia para o LogProcessor
 			logger.ProcessLog(source, logMessage, metadata)
