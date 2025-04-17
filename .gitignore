@@ -6,7 +6,6 @@
 # Dependency files
 vendor/
 /go.sum
-/go.mod
 
 # Editor & OS files
 *.swp
