@@ -19,10 +19,18 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	defer j.Close()
 	log.Println("[DEBUG] Journal aberto com sucesso")
 
+	// Move o cursor para o final
 	if err := j.SeekTail(); err != nil {
 		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
 	}
 	log.Println("[DEBUG] Executado SeekTail com sucesso")
+
+	// Avança uma entrada para começar após o último log existente
+	_, err = j.Next()
+	if err != nil {
+		log.Fatalf("[ERROR] Falha ao mover cursor após SeekTail: %v", err)
+	}
+	log.Println("[DEBUG] Cursor avançado após SeekTail")
 
 	log.Println("[INFO] Journald streaming started...")
 
@@ -32,14 +40,12 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			log.Println("[INFO] Journald stream stopped.")
 			return
 		default:
-			log.Println("entrou no loop")
-			// Espera nova entrada
+			log.Println("[DEBUG] Esperando nova entrada...")
 			r := j.Wait(time.Second)
 			if r == sdjournal.SD_JOURNAL_NOP {
 				continue
 			}
 
-			// Lê próxima entrada
 			n, err := j.Next()
 			if err != nil {
 				log.Printf("[ERROR] Falha ao chamar Next(): %v", err)
@@ -55,8 +61,9 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 				continue
 			}
 
-			logMessage := entry.Fields["MESSAGE"]
 			log.Printf("[DEBUG] Entrada bruta: %+v", entry.Fields)
+
+			logMessage := entry.Fields["MESSAGE"]
 			if logMessage == "" {
 				continue
 			}
