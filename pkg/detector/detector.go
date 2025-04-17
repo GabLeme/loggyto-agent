@@ -9,7 +9,8 @@ import (
 
 	"log-agent/pkg/collector/docker"
 	"log-agent/pkg/collector/journald"
-	"log-agent/pkg/collector/kubernetes"
+
+	//"log-agent/pkg/collector/kubernetes"
 	"log-agent/pkg/outputs"
 	"log-agent/pkg/processor"
 )
@@ -81,9 +82,9 @@ func StartCollector() {
 	}
 
 	switch env {
-	case "kubernetes", "microk8s", "minikube":
-		k8sCollector := kubernetes.NewKubernetesCollector(logProcessor)
-		collector = k8sCollector
+	// case "kubernetes", "microk8s", "minikube":
+	// 	k8sCollector := kubernetes.NewKubernetesCollector(logProcessor)
+	// 	collector = k8sCollector
 	case "docker":
 		collector = docker.NewContainerCollector(logProcessor)
 	case "journald":
