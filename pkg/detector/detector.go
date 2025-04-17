@@ -8,10 +8,29 @@ import (
 	"syscall"
 
 	"log-agent/pkg/collector/docker"
+	"log-agent/pkg/collector/journald"
 	"log-agent/pkg/collector/kubernetes"
 	"log-agent/pkg/outputs"
 	"log-agent/pkg/processor"
 )
+
+func DetectJournald() bool {
+	paths := []string{
+		"/run/systemd/journal/socket",
+		"/var/run/systemd/journal/socket",
+		"/run/log/journal",
+		"/var/log/journal",
+	}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			fmt.Println("[INFO] Detected systemd journald at:", path)
+			return true
+		}
+	}
+	fmt.Println("[WARNING] journald not detected on this system.")
+	return false
+}
 
 func DetectEnvironment() string {
 	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
@@ -35,6 +54,10 @@ func DetectEnvironment() string {
 			fmt.Println("Detected: Minikube")
 			return "minikube"
 		}
+	}
+
+	if DetectJournald() {
+		return "journald"
 	}
 
 	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
@@ -63,8 +86,10 @@ func StartCollector() {
 		collector = k8sCollector
 	case "docker":
 		collector = docker.NewContainerCollector(logProcessor)
+	case "journald":
+		collector = journald.NewJournaldCollector(logProcessor)
 	default:
-		fmt.Println("No suitable environment detected. Exiting...")
+		collector = journald.NewJournaldCollector(logProcessor)
 		return
 	}
 
