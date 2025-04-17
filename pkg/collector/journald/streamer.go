@@ -32,6 +32,7 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			log.Println("[INFO] Journald stream stopped.")
 			return
 		default:
+			log.Println("entrou no loop")
 			// Espera nova entrada
 			r := j.Wait(time.Second)
 			if r == sdjournal.SD_JOURNAL_NOP {
@@ -55,6 +56,7 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			}
 
 			logMessage := entry.Fields["MESSAGE"]
+			log.Printf("[DEBUG] Entrada bruta: %+v", entry.Fields)
 			if logMessage == "" {
 				continue
 			}
