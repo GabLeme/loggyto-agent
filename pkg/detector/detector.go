@@ -3,7 +3,6 @@ package detector
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"syscall"
 
@@ -34,28 +33,28 @@ func DetectJournald() bool {
 }
 
 func DetectEnvironment() string {
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		fmt.Println("Detected: Kubernetes Cluster")
-		return "kubernetes"
-	}
+	// if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	// 	fmt.Println("Detected: Kubernetes Cluster")
+	// 	return "kubernetes"
+	// }
 
-	if _, err := exec.LookPath("microk8s"); err == nil {
-		cmd := exec.Command("microk8s", "status")
-		output, _ := cmd.Output()
-		if string(output) != "" {
-			fmt.Println("Detected: MicroK8s")
-			return "microk8s"
-		}
-	}
+	// if _, err := exec.LookPath("microk8s"); err == nil {
+	// 	cmd := exec.Command("microk8s", "status")
+	// 	output, _ := cmd.Output()
+	// 	if string(output) != "" {
+	// 		fmt.Println("Detected: MicroK8s")
+	// 		return "microk8s"
+	// 	}
+	// }
 
-	if _, err := exec.LookPath("minikube"); err == nil {
-		cmd := exec.Command("minikube", "status")
-		output, _ := cmd.Output()
-		if string(output) != "" {
-			fmt.Println("Detected: Minikube")
-			return "minikube"
-		}
-	}
+	// if _, err := exec.LookPath("minikube"); err == nil {
+	// 	cmd := exec.Command("minikube", "status")
+	// 	output, _ := cmd.Output()
+	// 	if string(output) != "" {
+	// 		fmt.Println("Detected: Minikube")
+	// 		return "minikube"
+	// 	}
+	// }
 
 	if DetectJournald() {
 		return "journald"
