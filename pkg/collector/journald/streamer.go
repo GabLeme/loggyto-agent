@@ -17,16 +17,13 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 		log.Fatalf("[ERROR] Falha ao abrir o journald: %v", err)
 	}
 	defer j.Close()
-
 	log.Println("[DEBUG] Journal aberto com sucesso")
 
 	if err := j.SeekTail(); err != nil {
 		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
 	}
-
 	log.Println("[DEBUG] Executado SeekTail com sucesso")
 
-	j.Next() // move para além da última entrada
 	log.Println("[INFO] Journald streaming started...")
 
 	for {
@@ -35,11 +32,13 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			log.Println("[INFO] Journald stream stopped.")
 			return
 		default:
+			// Espera nova entrada
 			r := j.Wait(time.Second)
 			if r == sdjournal.SD_JOURNAL_NOP {
 				continue
 			}
 
+			// Lê próxima entrada
 			n, err := j.Next()
 			if err != nil {
 				log.Printf("[ERROR] Falha ao chamar Next(): %v", err)
@@ -60,9 +59,8 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 				continue
 			}
 
-			// Campos opcionais defensivos
-			prio := getOrDefault(entry.Fields, "PRIORITY", "unknown")
 			source := getOrDefault(entry.Fields, "SYSLOG_IDENTIFIER", "unknown")
+			prio := getOrDefault(entry.Fields, "PRIORITY", "unknown")
 			unit := getOrDefault(entry.Fields, "_SYSTEMD_UNIT", "")
 			pid := getOrDefault(entry.Fields, "_PID", "")
 			uid := getOrDefault(entry.Fields, "_UID", "")
@@ -76,7 +74,6 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			}
 
 			log.Printf("[DEBUG] New journal entry from '%s': %s", source, logMessage)
-
 			logger.ProcessLog(source, logMessage, metadata)
 		}
 	}
