@@ -19,19 +19,22 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	defer j.Close()
 	log.Println("[DEBUG] Journal aberto com sucesso")
 
-	// Captura todas as entradas, sem filtro
-	if err := j.AddMatch(""); err != nil {
-		log.Fatalf("[ERROR] Falha ao aplicar filtro global: %v", err)
+	// Adiciona filtros para capturar logs de todos os transportes
+	if err := j.AddMatch("_TRANSPORT=journal"); err != nil {
+		log.Fatalf("[ERROR] Falha ao adicionar filtro journal: %v", err)
 	}
-	log.Println("[DEBUG] Filtro vazio (tudo) aplicado com sucesso")
+	if err := j.AddMatch("_TRANSPORT=syslog"); err != nil {
+		log.Fatalf("[ERROR] Falha ao adicionar filtro syslog: %v", err)
+	}
+	log.Println("[DEBUG] Filtros de transporte aplicados com sucesso")
 
-	// Move o cursor para o final
+	// Move o cursor para o final do journal
 	if err := j.SeekTail(); err != nil {
 		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
 	}
 	log.Println("[DEBUG] Executado SeekTail com sucesso")
 
-	// Avança para a próxima entrada
+	// Avança uma entrada para garantir que o cursor esteja após a última
 	_, err = j.Next()
 	if err != nil {
 		log.Fatalf("[ERROR] Falha ao mover cursor após SeekTail: %v", err)
