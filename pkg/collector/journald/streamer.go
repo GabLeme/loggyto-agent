@@ -72,7 +72,7 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 				continue
 			}
 
-			log.Printf("[DEBUG] Entrada bruta: %+v", entry.Fields)
+			log.Printf("[DEBUG] Entrada bruta: %+v", entry)
 
 			logMessage := entry.Fields["MESSAGE"]
 			if logMessage == "" {
