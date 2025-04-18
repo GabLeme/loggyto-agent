@@ -19,26 +19,23 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	defer j.Close()
 	log.Println("[DEBUG] Journal aberto com sucesso")
 
-	// Limpa quaisquer filtros implícitos (essencial!)
+	// Limpa quaisquer filtros implícitos
 	j.FlushMatches()
 
-	// Adiciona filtros válidos
+	// Captura todas as entradas que chegam via journald (inclui syslog)
 	if err := j.AddMatch("_TRANSPORT=journal"); err != nil {
 		log.Fatalf("[ERROR] Falha ao adicionar filtro journal: %v", err)
 	}
-	if err := j.AddMatch("_TRANSPORT=syslog"); err != nil {
-		log.Fatalf("[ERROR] Falha ao adicionar filtro syslog: %v", err)
-	}
-	log.Println("[DEBUG] Filtros de transporte aplicados com sucesso")
+	log.Println("[DEBUG] Filtro de transporte journal aplicado com sucesso")
 
-	// Move o cursor para o final
+	// Move o cursor para o final para só pegar novas entradas
 	if err := j.SeekTail(); err != nil {
 		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
 	}
 	log.Println("[DEBUG] Executado SeekTail com sucesso")
 
-	_, err = j.Next()
-	if err != nil {
+	// Avança cursor para a próxima entrada
+	if _, err := j.Next(); err != nil {
 		log.Fatalf("[ERROR] Falha ao mover cursor após SeekTail: %v", err)
 	}
 	log.Println("[DEBUG] Cursor avançado após SeekTail")
@@ -52,8 +49,12 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			return
 		default:
 			log.Println("[DEBUG] Esperando nova entrada...")
-			r := j.Wait(time.Second)
-			if r == sdjournal.SD_JOURNAL_NOP {
+			switch r := j.Wait(time.Second); r {
+			case sdjournal.SD_JOURNAL_NOP:
+				continue
+			case sdjournal.SD_JOURNAL_APPEND, sdjournal.SD_JOURNAL_INVALIDATE:
+				// Há algo novo para ler
+			default:
 				continue
 			}
 
@@ -74,8 +75,8 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 
 			log.Printf("[DEBUG] Entrada bruta: %+v", entry)
 
-			logMessage := entry.Fields["MESSAGE"]
-			if logMessage == "" {
+			msg := entry.Fields["MESSAGE"]
+			if msg == "" {
 				continue
 			}
 
@@ -93,8 +94,8 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 				"journal":  "true",
 			}
 
-			log.Printf("[DEBUG] New journal entry from '%s': %s", source, logMessage)
-			logger.ProcessLog(source, logMessage, metadata)
+			log.Printf("[DEBUG] New journal entry from '%s': %s", source, msg)
+			logger.ProcessLog(source, msg, metadata)
 		}
 	}
 }
