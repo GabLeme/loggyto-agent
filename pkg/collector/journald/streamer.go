@@ -10,32 +10,20 @@ import (
 )
 
 func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) {
-	log.Println("[DEBUG] Iniciando abertura do journal...")
-
 	j, err := sdjournal.NewJournal()
 	if err != nil {
-		log.Fatalf("[ERROR] Falha ao abrir o journald: %v", err)
+		log.Fatalf("[ERROR] Failed to open journald: %v", err)
 	}
 	defer j.Close()
-	log.Println("[DEBUG] Journal aberto com sucesso")
 
-	// Limpa quaisquer filtros antigos — sem AddMatch aqui, para ler tudo
 	j.FlushMatches()
-	log.Println("[DEBUG] Nenhum filtro de transporte aplicado (captura tudo)")
 
-	// Posiciona no fim do journal
 	if err := j.SeekTail(); err != nil {
-		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
+		log.Fatalf("[ERROR] Failed to execute SeekTail: %v", err)
 	}
-	log.Println("[DEBUG] Executado SeekTail com sucesso")
-
-	// Posiciona no último registro (tail aponta após o último)
 	if _, err := j.Previous(); err != nil {
-		log.Fatalf("[ERROR] Falha ao executar Previous após SeekTail: %v", err)
+		log.Fatalf("[ERROR] Failed to execute Previous after SeekTail: %v", err)
 	}
-	log.Println("[DEBUG] Executado Previous para posicionar no último registro")
-
-	log.Println("[INFO] Journald streaming started...")
 
 	for {
 		select {
@@ -45,17 +33,16 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 		default:
 		}
 
-		log.Println("[DEBUG] Esperando nova entrada...")
+		log.Println("[DEBUG] Waiting for new entry...")
 		switch ev := j.Wait(time.Second); ev {
 		case sdjournal.SD_JOURNAL_APPEND, sdjournal.SD_JOURNAL_INVALIDATE:
-			// Há novos registros no journal
 		default:
 			continue
 		}
 
 		n, err := j.Next()
 		if err != nil {
-			log.Printf("[ERROR] Falha ao chamar Next(): %v", err)
+			log.Printf("[ERROR] Failed to call Next(): %v", err)
 			continue
 		}
 		if n == 0 {
@@ -64,7 +51,7 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 
 		entry, err := j.GetEntry()
 		if err != nil {
-			log.Printf("[ERROR] Falha ao obter entrada do journal: %v", err)
+			log.Printf("[ERROR] Failed to retrieve journal entry: %v", err)
 			continue
 		}
 
