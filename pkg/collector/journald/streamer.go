@@ -33,7 +33,6 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 		default:
 		}
 
-		log.Println("[DEBUG] Waiting for new entry...")
 		switch ev := j.Wait(time.Second); ev {
 		case sdjournal.SD_JOURNAL_APPEND, sdjournal.SD_JOURNAL_INVALIDATE:
 		default:
