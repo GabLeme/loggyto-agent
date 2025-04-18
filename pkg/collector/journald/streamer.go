@@ -19,7 +19,10 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	defer j.Close()
 	log.Println("[DEBUG] Journal aberto com sucesso")
 
-	// Adiciona filtros para capturar logs de todos os transportes
+	// Limpa quaisquer filtros implícitos (essencial!)
+	j.FlushMatches()
+
+	// Adiciona filtros válidos
 	if err := j.AddMatch("_TRANSPORT=journal"); err != nil {
 		log.Fatalf("[ERROR] Falha ao adicionar filtro journal: %v", err)
 	}
@@ -28,13 +31,12 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	}
 	log.Println("[DEBUG] Filtros de transporte aplicados com sucesso")
 
-	// Move o cursor para o final do journal
+	// Move o cursor para o final
 	if err := j.SeekTail(); err != nil {
 		log.Fatalf("[ERROR] Falha ao executar SeekTail: %v", err)
 	}
 	log.Println("[DEBUG] Executado SeekTail com sucesso")
 
-	// Avança uma entrada para garantir que o cursor esteja após a última
 	_, err = j.Next()
 	if err != nil {
 		log.Fatalf("[ERROR] Falha ao mover cursor após SeekTail: %v", err)
@@ -97,7 +99,6 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 	}
 }
 
-// getOrDefault retorna o valor de um campo ou um padrão caso não exista
 func getOrDefault(fields map[string]string, key string, fallback string) string {
 	if val, ok := fields[key]; ok {
 		return val
