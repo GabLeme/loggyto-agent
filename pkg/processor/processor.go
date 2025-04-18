@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const logEndpoint = "http://localhost:9090/logs" // Substitua pela URL real
+const logEndpoint = "http://10.12.0.10:9090/logs" // Substitua pela URL real
 
 type LogProcessor struct {
 	output   outputs.Output
