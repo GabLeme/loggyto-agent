@@ -1,7 +1,9 @@
-version: '3.8'
+version: "3.8"
+
 services:
-  spring-error-app:
-    image: ghcr.io/gabrielleme/spring-error-tester:latest
-    container_name: spring-error-tester
+  nginx:
+    image: nginx:alpine
+    container_name: test-nginx
     ports:
-      - "8080:8080"
+      - "8080:80"
+    restart: unless-stopped

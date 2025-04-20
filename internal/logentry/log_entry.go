@@ -1,4 +1,4 @@
-package processor
+package logentry
 
 type LogEntry struct {
 	Timestamp         string            `json:"timestamp"`

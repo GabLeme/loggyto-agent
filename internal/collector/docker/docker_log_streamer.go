@@ -13,7 +13,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 
-	"log-agent/pkg/processor"
+	"log-agent/internal/processor"
 )
 
 func StartLogStream(

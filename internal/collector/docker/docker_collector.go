@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"log-agent/pkg/processor"
-	"log-agent/pkg/utils"
+	"log-agent/internal/processor"
+	"log-agent/internal/utils"
 
 	"github.com/docker/docker/api/types/container"
 	dockerevents "github.com/docker/docker/api/types/events"
@@ -84,28 +84,10 @@ func (cc *DockerCollector) collectContainers() {
 }
 
 func (cc *DockerCollector) startContainerLogStream(containerID, containerName string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	containerInfo, err := cc.client.ContainerInspect(ctx, containerID)
-	if err != nil {
-		log.Printf("[ERROR] Error inspecting container %s: %v", containerID[:12], err)
-		return
-	}
-
-	cc.checkContainerMounts(containerName, containerID, containerInfo)
 	StartLogStream(cc.client, containerID, containerName, cc.Logger, cc)
-}
-
-func (cc *DockerCollector) checkContainerMounts(containerName, containerID string, containerInfo container.InspectResponse) {
-	// for _, mount := range containerInfo.Mounts {
-	// 	src := strings.ToLower(mount.Source)
-	// 	dest := strings.ToLower(mount.Destination)
-	// 	if strings.Contains(src, "log") || strings.Contains(dest, "log") {
-	// 		log.Printf("[WARNING] Container '%s' (%s) has a volume mount involving logs: '%s' -> '%s'. Logs might be written to files instead of stdout/stderr.",
-	// 			containerName, containerID[:12], mount.Source, mount.Destination)
-	// 	}
-	// }
 }
 
 func (cc *DockerCollector) Stop() {

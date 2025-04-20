@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"log-agent/pkg/processor"
-	"log-agent/pkg/utils"
+	"log-agent/internal/processor"
+	"log-agent/internal/utils"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"

@@ -1,12 +1,10 @@
 package processor
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-
-	"log-agent/pkg/outputs"
-
+	"log"
+	"log-agent/internal/sender"
+	"log-agent/internal/outputs"
+	"log-agent/internal/logentry"
 	"github.com/google/uuid"
 )
 
@@ -15,12 +13,14 @@ const logEndpoint = "http://10.12.0.10:9090/logs" // Substitua pela URL real
 type LogProcessor struct {
 	output   outputs.Output
 	groupers map[string]*ExceptionGrouper
+	sender   *sender.Sender
 }
 
-func NewLogProcessor(output outputs.Output) *LogProcessor {
+func NewLogProcessor(s *sender.Sender, output outputs.Output) *LogProcessor {
 	return &LogProcessor{
 		output:   output,
 		groupers: make(map[string]*ExceptionGrouper),
+		sender:   s,
 	}
 }
 
@@ -66,9 +66,11 @@ func (p *LogProcessor) ProcessLog(source, logData string, metadata map[string]st
 		TimestampInferred: inferred,
 	}
 
-	logJSON, _ := json.Marshal(entry)
-	go sendLogToEndpoint(logJSON)
-	println(string(logJSON))
+	err := p.sender.Send([]processor.LogEntry(entry))
+
+	if err != nil {
+		log.Printf("[ERROR] Failed to send log entry: %v", err)
+	}
 }
 
 func (p *LogProcessor) Flush(containerID string) (*GroupedLog, bool) {
@@ -76,13 +78,4 @@ func (p *LogProcessor) Flush(containerID string) (*GroupedLog, bool) {
 		return grouper.Flush()
 	}
 	return nil, false
-}
-
-func sendLogToEndpoint(logData []byte) {
-	resp, err := http.Post(logEndpoint, "application/json", bytes.NewBuffer(logData))
-	if err != nil {
-		println("err")
-		return
-	}
-	defer resp.Body.Close()
 }
