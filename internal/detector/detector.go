@@ -32,15 +32,15 @@ func DetectJournald() bool {
 }
 
 func DetectEnvironment() string {
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-		log.Println("[INFO] Detected Kubernetes environment.")
-		return "kubernetes"
-	}
+	// if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	// 	log.Println("[INFO] Detected Kubernetes environment.")
+	// 	return "kubernetes"
+	// }
 
-	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
-		log.Println("[INFO] Detected Docker environment.")
-		return "docker"
-	}
+	// if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+	// 	log.Println("[INFO] Detected Docker environment.")
+	// 	return "docker"
+	// }
 
 	if DetectJournald() {
 		return "journald"
