@@ -6,11 +6,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"log-agent/internal/collector/docker"
 	"log-agent/internal/sender"
 
 	"log-agent/internal/collector/journald"
-	"log-agent/internal/collector/kubernetes"
 	"log-agent/internal/outputs"
 	"log-agent/internal/processor"
 )
@@ -66,10 +64,10 @@ func StartCollector() {
 	}
 
 	switch env {
-	case "kubernetes":
-		collector = kubernetes.NewKubernetesCollector(logProcessor)
-	case "docker":
-		collector = docker.NewContainerCollector(logProcessor)
+	// case "kubernetes":
+	// 	collector = kubernetes.NewKubernetesCollector(logProcessor)
+	// case "docker":
+	// 	collector = docker.NewContainerCollector(logProcessor)
 	case "journald":
 		collector = journald.NewJournaldCollector(logProcessor)
 	default:
