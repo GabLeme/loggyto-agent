@@ -9,7 +9,7 @@ import (
 	"log-agent/internal/collector/docker"
 	"log-agent/internal/sender"
 
-	// "log-agent/internal/collector/journald"
+	"log-agent/internal/collector/journald"
 	"log-agent/internal/collector/kubernetes"
 	"log-agent/internal/outputs"
 	"log-agent/internal/processor"
@@ -71,7 +71,7 @@ func StartCollector() {
 	case "docker":
 		collector = docker.NewContainerCollector(logProcessor)
 	case "journald":
-		// collector = journald.NewJournaldCollector(logProcessor)
+		collector = journald.NewJournaldCollector(logProcessor)
 	default:
 		log.Println("[ERROR] No compatible environment detected. Exiting.")
 		return

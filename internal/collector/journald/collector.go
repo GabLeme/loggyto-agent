@@ -2,7 +2,7 @@ package journald
 
 import (
 	"log"
-	"log-agent/pkg/processor"
+	"log-agent/internal/processor"
 )
 
 type JournaldCollector struct {

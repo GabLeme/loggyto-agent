@@ -16,7 +16,7 @@ ENV GOOS=$TARGETOS
 ENV GOARCH=$TARGETARCH
 ENV CGO_ENABLED=1
 
-RUN go build -o log-agent main.go
+RUN go build -o log-agent ./cmd/main.go
 
 # Imagem final minimalista
 FROM --platform=$TARGETPLATFORM debian:bookworm-slim

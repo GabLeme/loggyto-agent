@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"log-agent/pkg/processor"
+	"log-agent/internal/processor"
 
 	"github.com/coreos/go-systemd/v22/sdjournal"
 )
