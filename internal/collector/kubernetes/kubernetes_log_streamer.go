@@ -67,12 +67,8 @@ func (kls *KubernetesLogStreamer) StreamLogs() {
 		logMessage := string(buf[:bytesRead])
 
 		kls.logger.ProcessLog("kubernetes", logMessage, map[string]string{
-			"pod_name":     kls.podName,
-			"namespace":    kls.namespace,
-			"host_name":    kls.hostInfo["host_name"],
-			"machine_ip":   kls.hostInfo["machine_ip"],
-			"os":           kls.hostInfo["os"],
-			"architecture": kls.hostInfo["architecture"],
+			"pod_name":  kls.podName,
+			"namespace": kls.namespace,
 		})
 	}
 }

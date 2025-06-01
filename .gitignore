@@ -1,7 +1,6 @@
 # Go build artifacts
 /bin/
 /build/
-/log-agent
 
 # Dependency files
 vendor/

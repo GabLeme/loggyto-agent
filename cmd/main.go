@@ -5,5 +5,5 @@ import (
 )
 
 func main() {
-	detector.StartCollector()
+	detector.StartCollectors()
 }

@@ -6,12 +6,34 @@ import (
 	"os/signal"
 	"syscall"
 
-	"log-agent/internal/sender"
-
+	"log-agent/internal/collector/docker"
 	"log-agent/internal/collector/journald"
+	"log-agent/internal/collector/kubernetes"
 	"log-agent/internal/outputs"
 	"log-agent/internal/processor"
+	"log-agent/internal/sender"
 )
+
+type Collector interface {
+	Start()
+	Stop()
+}
+
+func DetectDocker() bool {
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		log.Println("[INFO] Detected Docker environment.")
+		return true
+	}
+	return false
+}
+
+func DetectKubernetes() bool {
+	if _, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount"); err == nil {
+		log.Println("[INFO] Detected Kubernetes environment.")
+		return true
+	}
+	return false
+}
 
 func DetectJournald() bool {
 	paths := []string{
@@ -27,62 +49,46 @@ func DetectJournald() bool {
 			return true
 		}
 	}
-	log.Printf("[INFO] Journald not detected on this system.")
+	log.Println("[INFO] Journald not detected on this system.")
 	return false
 }
 
-func DetectEnvironment() string {
-	// if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
-	// 	log.Println("[INFO] Detected Kubernetes environment.")
-	// 	return "kubernetes"
-	// }
-
-	// if _, err := os.Stat("/var/run/docker.sock"); err == nil {
-	// 	log.Println("[INFO] Detected Docker environment.")
-	// 	return "docker"
-	// }
-
-	if DetectJournald() {
-		return "journald"
-	}
-
-	log.Println("[WARNING] Environment detection failed. Running in unknown environment.")
-	return "unknown"
-}
-
-func StartCollector() {
-	env := DetectEnvironment()
+func StartCollectors() {
 	cfg := sender.LoadConfigFromEnv()
 	s := sender.NewSender(cfg)
-
 	output := outputs.NewStdoutOutput()
 	logProcessor := processor.NewLogProcessor(s, output)
 
-	var collector interface {
-		Start()
-		Stop()
+	var collectors []Collector
+
+	if DetectDocker() {
+		collectors = append(collectors, docker.NewContainerCollector(logProcessor))
 	}
 
-	switch env {
-	// case "kubernetes":
-	// 	collector = kubernetes.NewKubernetesCollector(logProcessor)
-	// case "docker":
-	// 	collector = docker.NewContainerCollector(logProcessor)
-	case "journald":
-		collector = journald.NewJournaldCollector(logProcessor)
-	default:
-		log.Println("[ERROR] No compatible environment detected. Exiting.")
+	if DetectKubernetes() {
+		collectors = append(collectors, kubernetes.NewKubernetesCollector(logProcessor))
+	}
+
+	if DetectJournald() {
+		collectors = append(collectors, journald.NewJournaldCollector(logProcessor))
+	}
+
+	if len(collectors) == 0 {
+		log.Println("[ERROR] No compatible environments detected. Exiting.")
 		return
 	}
 
-	log.Println("[INFO] Starting collector...")
-	go collector.Start()
+	log.Printf("[INFO] Starting %d collectors...", len(collectors))
+	for _, c := range collectors {
+		go c.Start()
+	}
 
-	// graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("[INFO] Shutting down collector...")
-	collector.Stop()
+	log.Println("[INFO] Shutting down collectors...")
+	for _, c := range collectors {
+		c.Stop()
+	}
 }
