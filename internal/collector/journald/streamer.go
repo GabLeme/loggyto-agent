@@ -73,7 +73,6 @@ func StartJournalStream(logger *processor.LogProcessor, stopChan chan struct{}) 
 			"journal":  "true",
 		}
 
-		log.Printf("[DEBUG] New journal entry from '%s': %s", source, msg)
 		logger.ProcessLog(source, msg, metadata)
 	}
 }

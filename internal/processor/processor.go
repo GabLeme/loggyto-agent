@@ -2,6 +2,8 @@ package processor
 
 import (
 	"log"
+	"regexp"
+	"strings"
 
 	"log-agent/internal/logentry"
 	"log-agent/internal/outputs"
@@ -39,6 +41,11 @@ func (p *LogProcessor) ProcessLog(source, logData string, metadata map[string]st
 	}
 
 	cleanedMessage := cleanLogMessage(grouped.Message)
+
+	if isInvalidLog(cleanedMessage) {
+		return
+	}
+
 	logLevel := grouped.LogLevel
 	if logLevel == "" {
 		logLevel = detectLogLevel(cleanedMessage)
@@ -64,4 +71,13 @@ func (p *LogProcessor) Flush(containerID string) (*GroupedLog, bool) {
 		return grouper.Flush()
 	}
 	return nil, false
+}
+
+func isInvalidLog(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return true
+	}
+	match, _ := regexp.MatchString(`^[-=*_.~\\\/\s]+$`, trimmed)
+	return match
 }
