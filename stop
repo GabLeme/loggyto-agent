@@ -1,0 +1,10 @@
+sudo systemctl stop loggyto-agent.service \
+sudo systemctl disable loggyto-agent.service \
+sudo rm -f /etc/systemd/system/loggyto-agent.service \ 
+sudo systemctl daemon-reexec \ 
+sudo systemctl daemon-reload \
+sudo rm -rf /opt/loggyto
+
+curl -sSL https://raw.githubusercontent.com/GabLeme/loggyto-agent/main/setup.sh -o setup.sh \
+chmod +x setup.sh 
+sudo ./setup.sh -e http://10.12.0.10:9090/api/logs -k src_hNUNXL9kvjP_ZaaIN2yFli_LQa2EKBl9yeyzgPwNg-Q -s sk_x7djz7RNLDedrNKUHYtpeS6LPtHxgO2o4FA1vlNu8QZN_O9OQ_C4dogNUZg928mMjPsTLNvyzKdzKuJ2oO2y-w -n
