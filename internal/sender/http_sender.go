@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log-agent/internal/config"
 	"log-agent/internal/logentry"
 	"net/http"
 )
@@ -15,7 +16,7 @@ type Sender struct {
 	client    *http.Client
 }
 
-func NewSender(cfg Config) *Sender {
+func NewSender(cfg config.Config) *Sender {
 	return &Sender{
 		endpoint:  cfg.Endpoint,
 		apiKey:    cfg.APIKey,

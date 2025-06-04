@@ -9,6 +9,7 @@ import (
 	"log-agent/internal/collector/docker"
 	"log-agent/internal/collector/journald"
 	"log-agent/internal/collector/kubernetes"
+	"log-agent/internal/config"
 	"log-agent/internal/outputs"
 	"log-agent/internal/processor"
 	"log-agent/internal/sender"
@@ -54,7 +55,7 @@ func DetectJournald() bool {
 }
 
 func StartCollectors() {
-	cfg := sender.LoadConfigFromEnv()
+	cfg := config.LoadConfigFromEnv()
 	s := sender.NewSender(cfg)
 	output := outputs.NewStdoutOutput()
 	logProcessor := processor.NewLogProcessor(s, output)
@@ -62,7 +63,7 @@ func StartCollectors() {
 	var collectors []Collector
 
 	if DetectDocker() {
-		collectors = append(collectors, docker.NewContainerCollector(logProcessor))
+		collectors = append(collectors, docker.NewContainerCollector(logProcessor, cfg))
 	}
 
 	if DetectKubernetes() {

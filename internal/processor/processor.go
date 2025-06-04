@@ -4,25 +4,29 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"log-agent/internal/logentry"
 	"log-agent/internal/outputs"
 	"log-agent/internal/sender"
+	"log-agent/internal/utils"
 
 	"github.com/google/uuid"
 )
 
 type LogProcessor struct {
-	output   outputs.Output
-	groupers map[string]*ExceptionGrouper
-	sender   *sender.Sender
+	output       outputs.Output
+	groupers     map[string]*ExceptionGrouper
+	sender       *sender.Sender
+	messageCache *utils.MessageCache
 }
 
 func NewLogProcessor(s *sender.Sender, output outputs.Output) *LogProcessor {
 	return &LogProcessor{
-		output:   output,
-		groupers: make(map[string]*ExceptionGrouper),
-		sender:   s,
+		output:       output,
+		groupers:     make(map[string]*ExceptionGrouper),
+		sender:       s,
+		messageCache: utils.NewMessageCache(15 * time.Second), // TTL configurável
 	}
 }
 
@@ -43,6 +47,11 @@ func (p *LogProcessor) ProcessLog(source, logData string, metadata map[string]st
 	cleanedMessage := cleanLogMessage(grouped.Message)
 
 	if isInvalidLog(cleanedMessage) {
+		return
+	}
+
+	// 🔽 Rate-limit: ignora logs duplicados em um intervalo curto
+	if !p.messageCache.ShouldProcess(cleanedMessage) {
 		return
 	}
 

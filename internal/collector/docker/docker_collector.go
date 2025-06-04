@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"log-agent/internal/config"
 	"log-agent/internal/processor"
 	"log-agent/internal/utils"
 
@@ -22,13 +23,18 @@ type DockerCollector struct {
 	mu          sync.Mutex
 	Logger      *processor.LogProcessor
 	hostInfo    map[string]string
+	cfg         config.Config
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
-func NewContainerCollector(logger *processor.LogProcessor) *DockerCollector {
+func NewContainerCollector(logger *processor.LogProcessor, cfg config.Config) *DockerCollector {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatalf("[ERROR] Error creating Docker client: %v", err)
 	}
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	return &DockerCollector{
 		client:      cli,
@@ -36,6 +42,9 @@ func NewContainerCollector(logger *processor.LogProcessor) *DockerCollector {
 		logTrackers: make(map[string]struct{}),
 		Logger:      logger,
 		hostInfo:    utils.GetHostMetadata(),
+		cfg:         cfg,
+		ctx:         ctx,
+		cancel:      cancel,
 	}
 }
 
@@ -58,7 +67,7 @@ func (cc *DockerCollector) Start() {
 }
 
 func (cc *DockerCollector) collectContainers() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(cc.ctx, 10*time.Second)
 	defer cancel()
 
 	containers, err := cc.client.ContainerList(ctx, container.ListOptions{})
@@ -70,6 +79,10 @@ func (cc *DockerCollector) collectContainers() {
 	for _, cont := range containers {
 		containerID := cont.ID
 		containerName := strings.TrimPrefix(cont.Names[0], "/")
+
+		if cc.shouldIgnore(containerName) {
+			continue
+		}
 
 		cc.mu.Lock()
 		if _, exists := cc.logTrackers[containerID]; exists {
@@ -83,33 +96,57 @@ func (cc *DockerCollector) collectContainers() {
 	}
 }
 
+func (cc *DockerCollector) shouldIgnore(containerName string) bool {
+	for _, ignored := range cc.cfg.IgnoredContainers {
+		if ignored == containerName {
+			log.Printf("[INFO] Ignoring container %s", containerName)
+			return true
+		}
+	}
+	return false
+}
+
 func (cc *DockerCollector) startContainerLogStream(containerID, containerName string) {
-	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(cc.ctx, 10*time.Second)
 	defer cancel()
 
-	StartLogStream(cc.client, containerID, containerName, cc.Logger, cc)
+	StartLogStream(ctx, cc.client, containerID, containerName, cc.Logger, cc)
 }
 
 func (cc *DockerCollector) Stop() {
+	log.Println("[INFO] Stopping Docker Collector...")
+	cc.cancel()
 	close(cc.stopChan)
 	cc.client.Close()
 }
 
 func (cc *DockerCollector) watchDockerEvents() {
-	ctx := context.Background()
+	for {
+		select {
+		case <-cc.stopChan:
+			log.Println("[INFO] Stopping Docker event watcher...")
+			return
+		default:
+			cc.streamDockerEvents()
+			time.Sleep(5 * time.Second)
+		}
+	}
+}
+
+func (cc *DockerCollector) streamDockerEvents() {
+	ctx, cancel := context.WithCancel(cc.ctx)
+	defer cancel()
+
 	eventChan, errChan := cc.client.Events(ctx, dockerevents.ListOptions{})
 
 	for {
 		select {
 		case <-cc.stopChan:
-			log.Println("Stopping Docker event watcher...")
 			return
 		case event := <-eventChan:
 			cc.handleDockerEvent(event)
 		case err := <-errChan:
 			log.Printf("[ERROR] Error watching Docker events: %v", err)
-			time.Sleep(5 * time.Second)
-			go cc.watchDockerEvents()
 			return
 		}
 	}
@@ -132,6 +169,10 @@ func (cc *DockerCollector) handleDockerEvent(event dockerevents.Message) {
 }
 
 func (cc *DockerCollector) handleContainerStarted(containerID, containerName string) {
+	if cc.shouldIgnore(containerName) {
+		return
+	}
+
 	cc.mu.Lock()
 	if _, exists := cc.logTrackers[containerID]; exists {
 		cc.mu.Unlock()

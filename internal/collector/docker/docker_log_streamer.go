@@ -17,31 +17,29 @@ import (
 )
 
 func StartLogStream(
+	ctx context.Context,
 	cli *client.Client,
 	containerID string,
 	containerName string,
 	logger *processor.LogProcessor,
 	cc *DockerCollector,
 ) {
-	ctx := context.Background()
+	defer cc.removeLogTracker(containerID)
 
 	containerJSON, err := cli.ContainerInspect(ctx, containerID)
 	if err != nil {
 		log.Printf("[ERROR] Error inspecting container %s: %v", containerID, err)
-		cc.removeLogTracker(containerID)
 		return
 	}
 
 	state := containerJSON.State
 	if state == nil || !state.Running {
 		log.Printf("[WARNING] Container %s is not running (status: %s), skipping log stream.", containerID, state.Status)
-		cc.removeLogTracker(containerID)
 		return
 	}
 
 	if containerJSON.HostConfig.LogConfig.Type != "json-file" {
 		log.Printf("[ERROR] Unsupported log driver for container %s: %s", containerID, containerJSON.HostConfig.LogConfig.Type)
-		cc.removeLogTracker(containerID)
 		return
 	}
 
@@ -64,7 +62,6 @@ func StartLogStream(
 	}
 	if err != nil {
 		log.Printf("[ERROR] Failed to get logs for container %s after retries: %v", containerID, err)
-		cc.removeLogTracker(containerID)
 		return
 	}
 	defer logReader.Close()
@@ -112,8 +109,6 @@ func StartLogStream(
 	if group, ok := logger.Flush(containerID); ok && group != nil {
 		logger.ProcessLog(containerName, group.Message, enrichedMeta)
 	}
-
-	cc.removeLogTracker(containerID)
 }
 
 func readStream(reader io.Reader, containerID, containerName string, logger *processor.LogProcessor, metadata map[string]string) {
