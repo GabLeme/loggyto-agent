@@ -91,6 +91,9 @@ func (kc *KubernetesCollector) Start() {
 		"calico-system": true,
 		"logging":       true,
 		"cilium-system": true,
+		"linkerd":       true,
+		"cert-manager":  true,
+		"rook-ceph":     true,
 	}
 
 	ownPodName := kc.getPodName()

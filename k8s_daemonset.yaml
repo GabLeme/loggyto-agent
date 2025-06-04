@@ -1,32 +1,93 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loggyto
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: loggyto-agent
+  namespace: loggyto
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: loggyto-secret
+  namespace: loggyto
+type: Opaque
+stringData:
+  apiKey: "src_jS0ZjeWc7BJiQTglrLZ4ASEtEzMJE3qEqx_bT9raUnI"
+  apiSecret: "sk_gfAyndtRK0dkRyVfLdmAX553EAVM2Huz5SsfCrpubNIf9X00fE0GlahIa5u77l6QlaALpkkAJGRwqQXNkoL3mg"
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: log-agent
-  namespace: kube-system
+  name: loggyto-agent
+  namespace: loggyto
 spec:
   selector:
     matchLabels:
-      app: log-agent
+      app: loggyto-agent
   template:
     metadata:
       labels:
-        app: log-agent
+        app: loggyto-agent
     spec:
+      serviceAccountName: loggyto-agent
       imagePullSecrets:
-        - name: dockerhub-secret 
+        - name: dockerhub-secret
       containers:
-        - name: log-agent
-          image: gableme/proxito:latest
+        - name: loggyto-agent
+          image: gableme/loggyto:latest
           imagePullPolicy: Always
+          env:
+            - name: LOGGYTO_ENDPOINT
+              value: "http://10.12.0.10:9090/api/logs"
+            - name: LOGGYTO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: loggyto-secret
+                  key: apiKey
+            - name: LOGGYTO_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: loggyto-secret
+                  key: apiSecret
           volumeMounts:
             - name: varlog
               mountPath: /var/log
+              readOnly: true
+            - name: varlog-journal
+              mountPath: /var/log/journal
+              readOnly: true
+            - name: run-log-journal
+              mountPath: /run/log/journal
+              readOnly: true
+            - name: run-systemd-journal
+              mountPath: /run/systemd/journal
+              readOnly: true
+            - name: var-run-systemd-journal
+              mountPath: /var/run/systemd/journal
+              readOnly: true
             - name: docker-sock
               mountPath: /var/run/docker.sock
+              readOnly: true
       volumes:
         - name: varlog
           hostPath:
             path: /var/log
+        - name: varlog-journal
+          hostPath:
+            path: /var/log/journal
+        - name: run-log-journal
+          hostPath:
+            path: /run/log/journal
+        - name: run-systemd-journal
+          hostPath:
+            path: /run/systemd/journal
+        - name: var-run-systemd-journal
+          hostPath:
+            path: /var/run/systemd/journal
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock
