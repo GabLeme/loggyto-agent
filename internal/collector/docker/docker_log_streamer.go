@@ -106,9 +106,9 @@ func StartLogStream(
 		wg.Wait()
 	}
 
-	if group, ok := logger.Flush(containerID); ok && group != nil {
-		logger.ProcessLog(containerName, group.Message, enrichedMeta)
-	}
+	// if group, ok := logger.Flush(containerID); ok && group != nil {
+	// 	logger.ProcessLog(containerName, group.Message, enrichedMeta)
+	// }
 }
 
 func readStream(reader io.Reader, containerID, containerName string, logger *processor.LogProcessor, metadata map[string]string) {

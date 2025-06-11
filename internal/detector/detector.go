@@ -5,14 +5,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"log-agent/internal/collector/docker"
 	"log-agent/internal/collector/journald"
 	"log-agent/internal/collector/kubernetes"
 	"log-agent/internal/config"
-	"log-agent/internal/outputs"
+	"log-agent/internal/logentry"
+	"log-agent/internal/pipeline"
 	"log-agent/internal/processor"
 	"log-agent/internal/sender"
+	"log-agent/internal/utils"
 )
 
 type Collector interface {
@@ -57,8 +60,31 @@ func DetectJournald() bool {
 func StartCollectors() {
 	cfg := config.LoadConfigFromEnv()
 	s := sender.NewSender(cfg)
-	output := outputs.NewStdoutOutput()
-	logProcessor := processor.NewLogProcessor(s, output)
+
+	dedup := utils.NewMessageCache(15 * time.Second)
+
+	p := pipeline.NewPipeline(
+		func(raw string) []string {
+			class := pipeline.ClassifyLog(raw)
+			return pipeline.SplitLog(raw, class.Type)
+		},
+		pipeline.CleanLogMessage,
+		dedup.ShouldProcess,
+		pipeline.DetectLogLevel,
+		pipeline.TryExtractTimestamp,
+		func(entry *pipeline.LogEntry) error {
+			return s.Send(logentry.LogEntry{
+				Message:           entry.Message,
+				Timestamp:         entry.Timestamp.Format(time.RFC3339),
+				Level:             entry.Level,
+				MessageId:         entry.MessageId,
+				Labels:            entry.Labels,
+				TimestampInferred: entry.TimestampInferred,
+			})
+		},
+	)
+
+	logProcessor := processor.NewLogProcessor(p)
 
 	var collectors []Collector
 
