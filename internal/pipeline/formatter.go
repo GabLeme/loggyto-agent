@@ -46,7 +46,7 @@ func removeControlChars(s string) string {
 	}, s)
 }
 
-var tsPrefixRegex = regexp.MustCompile(`^(\[?\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?(Z| UTC)?\]?[-\s:]*)+`)
+var tsPrefixRegex = regexp.MustCompile(`^(\[?\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}([.,]\d+)?(Z| UTC)?\]?[-\s:]*)+`)
 
 func removeRedundantTimestamps(s string) string {
 	return tsPrefixRegex.ReplaceAllString(s, "")

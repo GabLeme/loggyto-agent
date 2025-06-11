@@ -51,7 +51,7 @@ func splitByHTTPVerb(raw string) []string {
 }
 
 func splitByDateTimestamp(raw string) []string {
-	pattern := regexp.MustCompile(`\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}`)
+	pattern := regexp.MustCompile(`\d{4}[-/]\d{2}[-/]\d{2}[ T]\d{2}:\d{2}:\d{2}([.,]\d+)?`)
 	return splitByRegex(raw, pattern)
 }
 
