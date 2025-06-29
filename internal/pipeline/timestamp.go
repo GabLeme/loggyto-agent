@@ -27,12 +27,12 @@ var extractRegex = regexp.MustCompile(`(?i)(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{
 func TryExtractTimestamp(msg string) (time.Time, bool) {
 	match := extractRegex.FindString(msg)
 	if match == "" {
-		return time.Now(), true
+		return time.Now().UTC(), true
 	}
 	for _, layout := range timestampPatterns {
 		if ts, err := time.Parse(layout, match); err == nil {
-			return ts, false
+			return ts.UTC(), false
 		}
 	}
-	return time.Now(), true
+	return time.Now().UTC(), true
 }

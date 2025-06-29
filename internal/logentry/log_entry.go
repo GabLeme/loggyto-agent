@@ -7,4 +7,5 @@ type LogEntry struct {
 	Level             string            `json:"level"`
 	MessageId         string            `json:"message_id"`
 	TimestampInferred bool              `json:"timestamp_inferred"`
+	Classification    string            `json:"classification"`
 }

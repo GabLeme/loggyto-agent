@@ -62,6 +62,11 @@ func StartCollectors() {
 	s := sender.NewSender(cfg)
 
 	dedup := utils.NewMessageCache(15 * time.Second)
+	redactor := pipeline.NewRedactor()
+
+	classifier := func(msg string) string {
+		return string(pipeline.ClassifyLog(msg).Type)
+	}
 
 	p := pipeline.NewPipeline(
 		func(raw string) []string {
@@ -70,11 +75,14 @@ func StartCollectors() {
 		},
 		pipeline.CleanLogMessage,
 		dedup.ShouldProcess,
+		redactor.Redact,
 		pipeline.DetectLogLevel,
 		pipeline.TryExtractTimestamp,
+		classifier,
 		func(entry *pipeline.LogEntry) error {
 			return s.Send(logentry.LogEntry{
 				Message:           entry.Message,
+				Classification:    entry.Classification,
 				Timestamp:         entry.Timestamp.Format(time.RFC3339),
 				Level:             entry.Level,
 				MessageId:         entry.MessageId,
